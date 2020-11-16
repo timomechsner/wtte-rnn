@@ -54,5 +54,5 @@ setup(
     },
     setup_requires=['pytest-runner'],
     tests_require=['pytest'],
-    packages=find_packages('.', exclude=['examples', 'tests']),
+    packages=find_packages('./python/', exclude=['examples', 'tests']),
 )
