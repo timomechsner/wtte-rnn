@@ -41,7 +41,7 @@ setup(
         'numpy',
         'pandas',
         'scipy',
-        'six==1.10.0',
+        'six>=1.10.0',
     ],
     extras_require={
         'plot': ['matplotlib'],
@@ -54,5 +54,5 @@ setup(
     },
     setup_requires=['pytest-runner'],
     tests_require=['pytest'],
-    packages=find_packages('./python/', exclude=['examples', 'tests']),
+    packages=find_packages('.', exclude=['examples', 'tests']),
 )
