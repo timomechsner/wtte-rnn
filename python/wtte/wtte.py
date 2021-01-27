@@ -7,8 +7,12 @@ from math import log
 import warnings
 import numpy as np
 
-from keras import backend as K
+import keras
+import keras.backend as K
+import tensorflow as tf
+from tensorflow.keras import layers, initializers
 from keras.callbacks import Callback
+from tensorflow.keras import layers
 
 
 def _keras_unstack_hack(ab):
@@ -149,6 +153,42 @@ class OuputActivation(object):
 output_activation = OuputActivation
 
 
+class WtteLayer(layers.Layer):
+    def __init__(self, **kwargs):
+        super(WtteLayer, self).__init__(name="WtteLayer", **kwargs)
+
+        self.a_bias = self.add_weight(name="Alpha_Bias", shape=(1,), initializer=initializers.Constant(2.3), trainable=False)
+        self.b_bias = self.add_weight(name="Beta_Bias", shape=(1,), initializer=initializers.Constant(21.), trainable=False)
+
+        self.a_scale = self.add_weight(name="Alpha_Scale", shape=(1,), initializer=initializers.Constant(2.3), trainable=False)
+        self.b_scale = self.add_weight(name="Beta_Scale", shape=(1,), initializer=initializers.Constant(20.), trainable=False)
+
+    def compute_mask(self, inputs, mask=None):
+        return mask
+
+    def compute_output_shape(self, input_shape):
+        output_shape = tf.TensorShape(2)
+        return output_shape
+
+    def call(self, x, mask=None):
+        a_scaler, b_scaler = tf.unstack(x, 2, -1)
+
+        a_scaler = K.tanh(a_scaler)
+        b_scaler = K.tanh(b_scaler)
+
+        a = self.a_bias + (self.a_scale * a_scaler)
+        b = self.b_bias + (self.b_scale * b_scaler)
+
+        a = K.exp(a)
+        b = K.softplus(b)
+
+        a = K.clip(a, 1.1, 100.)
+        b = K.clip(b, 1.0, 10.)
+
+        x = K.stack([a, b], axis=-1)
+        return x
+
+
 def _keras_split(y_true, y_pred):
     """
         Everything is a hack around the y_true,y_pred paradigm.
@@ -162,11 +202,13 @@ keras_split = _keras_split
 
 
 def loglik_discrete(y, u, a, b, epsilon=K.epsilon()):
-    hazard0 = K.pow((y + epsilon) / a, b)
-    hazard1 = K.pow((y + 1.0) / a, b)
+    hazard0 = K.pow((y + epsilon) / (a + epsilon), b)
+    hazard1 = K.pow((y + 1.0) / (a + epsilon), b)
+
+    diff = keras.backend.clip(hazard1 - hazard0, -10., 10.)
 
     loglikelihoods = u * \
-        K.log(K.exp(hazard1 - hazard0) - (1.0 - epsilon)) - hazard1
+        K.log(K.exp(diff) - (1.0 - epsilon)) - hazard1
     return loglikelihoods
 
 
@@ -235,15 +277,15 @@ class Loss(object):
                                       Use this method instead.')
 
     def loss_function(self, y_true, y_pred):
-
-        y, u, a, b = _keras_split(y_true, y_pred)
+        y, u = tf.unstack(y_true, num=2, axis=-1)
+        a, b = tf.unstack(y_pred, num=2, axis=-1)
         if self.kind == 'discrete':
             loglikelihoods = loglik_discrete(y, u, a, b)
         elif self.kind == 'continuous':
             loglikelihoods = loglik_continuous(y, u, a, b)
 
         if self.clip_prob is not None:
-            loglikelihoods = K.clip(loglikelihoods, 
+            loglikelihoods = K.clip(loglikelihoods,
                 log(self.clip_prob), log(1 - self.clip_prob))
         if self.reduce_loss:
             loss = -1.0 * K.mean(loglikelihoods, axis=-1)
@@ -256,7 +298,7 @@ class Loss(object):
 loss = Loss
 
 
-class WeightWatcher(Callback):
+class WeightWatcherLegacy(Callback):
     """Keras Callback to keep an eye on output layer weights.
         (under development)
 
@@ -382,6 +424,117 @@ class WeightWatcher(Callback):
             return None
 
         plt.title('weights (min,mean,max)')
+        color_y_axis(ax1, 'b')
+        color_y_axis(ax2, 'r')
+        plt.show()
+
+
+class WeightWatcher(Callback):
+    """Keras Callback to keep an eye on output layer weights.
+        (under development)
+
+        Usage:
+            weightwatcher = WeightWatcher(per_batch=True,per_epoch=False)
+            model.fit(...,callbacks=[weightwatcher])
+            weightwatcher.plot()
+    """
+
+    def __init__(self,
+                 per_batch=False,
+                 per_epoch=True
+                 ):
+        self.per_batch = per_batch
+        self.per_epoch = per_epoch
+
+    def on_train_begin(self, logs={}):
+        self.a_scale = []
+        self.b_scale = []
+        self.a_bias = []
+        self.b_bias = []
+
+    def append_metrics(self):
+        # Last two weightlayers in model
+
+        b_scaler, b_bias, a_scaler, a_bias = self.model.get_weights()[-4:]
+
+        a_scale, b_scale = a_scaler.mean(0), b_scaler.mean(0)
+
+        self.a_scale.append(a_scale)
+        self.b_scale.append(b_scale)
+        self.a_bias.append(a_bias)
+        self.b_bias.append(b_bias)
+
+    def on_train_end(self, logs={}):
+        if self.per_epoch:
+            self.append_metrics()
+        return
+
+    def on_epoch_begin(self, epoch, logs={}):
+        if self.per_epoch:
+            self.append_metrics()
+        return
+
+    def on_epoch_end(self, epoch, logs={}):
+        return
+
+    def on_batch_begin(self, batch, logs={}):
+        if self.per_batch:
+            self.append_metrics()
+        return
+
+    def on_batch_end(self, batch, logs={}):
+        if self.per_batch:
+            self.append_metrics()
+        return
+
+    def plot(self):
+        import matplotlib.pyplot as plt
+
+        # Create axes
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+
+        ax1.plot(self.a_bias, color='b')
+        ax1.set_xlabel('step')
+        ax1.set_ylabel('alpha')
+
+        ax2.plot(self.b_bias, color='r')
+        ax2.set_ylabel('beta')
+
+        # Change color of each axis
+        def color_y_axis(ax, color):
+            """Color your axes."""
+            for t in ax.get_yticklabels():
+                t.set_color(color)
+            return None
+
+        plt.title('biases')
+        color_y_axis(ax1, 'b')
+        color_y_axis(ax2, 'r')
+        plt.show()
+
+        ###############
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+
+        ax1.plot(self.a_scale, color='blue',
+                 linestyle='solid', label='mean', linewidth=1)
+
+        ax1.set_xlabel('step')
+        ax1.set_ylabel('alpha')
+
+        ax2.plot(self.b_scale, color='red',
+                 linestyle='solid', linewidth=1)
+        ax2.set_ylabel('beta')
+
+        # Change color of each axis
+        def color_y_axis(ax, color):
+            """Color your axes."""
+            for t in ax.get_yticklabels():
+                t.set_color(color)
+            return None
+
+        plt.title('scale')
         color_y_axis(ax1, 'b')
         color_y_axis(ax2, 'r')
         plt.show()
