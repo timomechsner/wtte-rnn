@@ -3,6 +3,8 @@ Wrapper for Python Weibull functions
 """
 import numpy as np
 
+from typing import Iterable
+
 
 def cumulative_hazard(t, a, b):
     """ Cumulative hazard
@@ -84,15 +86,6 @@ def mode(a, b):
     return mode
 
 
-def mean(a, b):
-    """ Continuous mean. at most 1 step below discretized mean 
-
-    `E[T ] <= E[Td] + 1` true for positive distributions.
-    """
-    from scipy.special import gamma
-    return a * gamma(1.0 + 1.0 / b)
-
-
 def quantiles(a, b, p):
     """ Quantiles
 
@@ -154,8 +147,41 @@ def discrete_loglik(t, a, b, u=1, equality=False):
 
     return loglik
 
-# Conditional excess
 
+def discrete_mean(a, b):
+    x = np.arange(a * 20)
+    return np.sum(x * np.array(list(map(lambda t: pmf(t, a, b), x))))
+
+
+def discrete_percentile(p, a, b):
+    return_array = isinstance(p, Iterable)
+    if not return_array:
+        ps = [p]
+    else:
+        ps = p
+
+    ts = np.zeros(len(ps))
+    for i, p in enumerate(ps):
+        x = 0
+        for t in range(int(np.ceil(a * 20))):
+            x_c = x + pmf(t, a, b)
+            if x_c > p:
+                ts[i] = t
+                break
+            else:
+                x = x_c
+    return ts if return_array else ts[0]
+
+
+def discrete_sample(a, b, n):
+    x = np.random.uniform(0, 1, n)
+    return discrete_percentile(x, a, b)
+
+# For use as 'dist' argument in scipy functions
+ppf = discrete_percentile
+
+
+# Conditional excess
 
 class conditional_excess():
     """ Experimental class for conditional excess distribution.
