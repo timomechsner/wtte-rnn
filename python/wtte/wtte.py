@@ -155,7 +155,8 @@ output_activation = OuputActivation
 
 class WtteLayer(layers.Layer):
     def __init__(self, **kwargs):
-        super(WtteLayer, self).__init__(name="WtteLayer", **kwargs)
+        kwargs["name"] = "WtteLayer"
+        super(WtteLayer, self).__init__(**kwargs)
 
         self.a_bias = self.add_weight(name="Alpha_Bias", shape=(1,), initializer=initializers.Constant(2.3), trainable=False)
         self.b_bias = self.add_weight(name="Beta_Bias", shape=(1,), initializer=initializers.Constant(21.), trainable=False)
