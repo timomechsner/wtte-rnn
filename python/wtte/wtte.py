@@ -185,6 +185,7 @@ class WtteLayer(layers.Layer):
 
         a = K.clip(a, 0.9, 99)
         b = K.clip(b, 0.9, 9.8)
+        b = K.pow(b, -1.) * (a + 2.) * 2.
 
         x = K.stack([a, b], axis=-1)
         return x
