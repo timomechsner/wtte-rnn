@@ -159,7 +159,7 @@ class WtteLayer(layers.Layer):
         super(WtteLayer, self).__init__(**kwargs)
 
         self.a_bias = self.add_weight(name="Alpha_Bias", shape=(1,), initializer=initializers.Constant(2.3), trainable=False)
-        self.b_bias = self.add_weight(name="Beta_Bias", shape=(1,), initializer=initializers.Constant(20.65), trainable=False)
+        self.b_bias = self.add_weight(name="Beta_Bias", shape=(1,), initializer=initializers.Constant(21.), trainable=False)
 
         self.a_scale = self.add_weight(name="Alpha_Scale", shape=(1,), initializer=initializers.Constant(2.3), trainable=False)
         self.b_scale = self.add_weight(name="Beta_Scale", shape=(1,), initializer=initializers.Constant(20.), trainable=False)
@@ -175,16 +175,16 @@ class WtteLayer(layers.Layer):
         a_scaler, b_scaler = tf.unstack(x, 2, -1)
 
         a_scaler = K.tanh(a_scaler)
-        b_scaler = K.tanh(b_scaler - 1.)
+        b_scaler = K.tanh(b_scaler)
 
         a = self.a_bias + (self.a_scale * a_scaler)
         b = self.b_bias + (self.b_scale * b_scaler)
 
-        a = K.exp(a) - 0.2
-        b = K.softplus(b) - 0.2
+        a = K.exp(a)
+        b = K.softplus(b)
 
-        a = K.clip(a, 0.9, 99)
-        b = K.clip(b, 0.9, 9.8)
+        a = K.clip(a, 1.1, 100.)
+        b = K.clip(b, 1.0, 10.)
         b = K.pow(b, -1.) * (a + 2.) * 2.
 
         x = K.stack([a, b], axis=-1)
