@@ -185,7 +185,7 @@ class WtteLayer(layers.Layer):
 
         a = K.clip(a, .8, 100.)
         b = K.clip(b, .8, 10.)
-        # b = K.pow(b, -1.) * (a + 2.) * 2.
+        b = K.pow(b, -1.) * (a + 2.) * 2.
 
         x = K.stack([a, b], axis=-1)
         return x
@@ -204,10 +204,10 @@ keras_split = _keras_split
 
 
 def loglik_discrete(y, u, a, b, epsilon=K.epsilon()):
-    hazard0 = K.pow((y + epsilon) / (a + epsilon), b)
-    hazard1 = K.pow((y + 1.0) / (a + epsilon), b)
+    hazard0 = K.clip(K.pow((y + epsilon) / (a + epsilon), b), 0., 9e20)
+    hazard1 = K.clip(K.pow((y + 1.0) / (a + epsilon), b), 0., 1e21)
 
-    diff = keras.backend.clip(hazard1 - hazard0, -10., 10.)
+    diff = keras.backend.clip(hazard1 - hazard0, 0., 60.)
 
     loglikelihoods = u * \
         K.log(K.exp(diff) - (1.0 - epsilon)) - hazard1
