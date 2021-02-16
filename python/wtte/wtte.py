@@ -207,7 +207,7 @@ def loglik_discrete(y, u, a, b, epsilon=K.epsilon()):
     hazard0 = K.clip(K.pow((y + epsilon) / (a + epsilon), b), 0., 9e20)
     hazard1 = K.clip(K.pow((y + 1.0) / (a + epsilon), b), 0., 1e21)
 
-    diff = keras.backend.clip(hazard1 - hazard0, 1.0, 60.)
+    diff = keras.backend.clip(hazard1 - hazard0, 0.0, 60.)
 
     loglikelihoods = u * \
         K.log(K.exp(diff) - (1.0 - epsilon)) - hazard1
